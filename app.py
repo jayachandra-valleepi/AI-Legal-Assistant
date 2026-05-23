@@ -1,7 +1,8 @@
 from flask import Flask, render_template, jsonify, request
 from langchain_pinecone import PineconeVectorStore
 from langchain_openai import ChatOpenAI
-from langchain.chains.retrieval import create_retrieval_chain
+from langchain.memory import ConversationBufferMemory
+from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
@@ -50,12 +51,26 @@ llm = ChatOpenAI(model = "gpt-4o-mini")
 prompt = ChatPromptTemplate.from_messages(
     [
         ("system", system_prompt),
-        ("human", "{input}")
+        ("human", "{question}")
     ]
 )
 
-question_answer_chain = create_stuff_documents_chain(llm, prompt)
-rag_chain = create_retrieval_chain(retriever, question_answer_chain)
+
+memory = ConversationBufferMemory(
+    memory_key="chat_history",
+    return_messages=True
+)
+
+
+
+rag_chain = ConversationalRetrievalChain.from_llm(
+    llm=llm,
+    retriever=retriever,
+    memory=memory,
+    combine_docs_chain_kwargs={
+        "prompt": prompt
+    }
+)
 
 
 
@@ -67,9 +82,8 @@ def index():
 @app.route("/get", methods=["GET", "POST"])
 def chat():
     msg = request.form["msg"]
-    input = msg
-    print(input)
-    response = rag_chain.invoke({"input" : msg})
+    print(msg)
+    response = rag_chain.invoke({"question" : msg})
     print("Response : ", response["answer"])
     return str(response["answer"])
 
